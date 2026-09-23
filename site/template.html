@@ -1,0 +1,849 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Где ботать в Телеграфе</title>
+<style>
+  :root {
+    --bg: #f4f4f1;
+    --surface: #ffffff;
+    --text: #17181a;
+    --muted: #6a6d73;
+    --line: #e2e2dd;
+    --accent: #17181a;
+    /* статусы: заливка на карте, цвет номера */
+    --busy: #f3a29e;   --busy-ink: #7c1b1b;   --busy-hl: #ec8680;
+    --soon: #e2ea8c;   --soon-ink: #4d5700;   --soon-hl: #d4de62;
+    --free: #95d8b0;   --free-ink: #0f5730;   --free-hl: #74ca96;
+    --nodata: #d7dbe2; --nodata-ink: #4d535d; --nodata-hl: #c5cad3;
+    --study: #bcdcf3;  --study-ink: #124a6b;  --study-hl: #9dcbeb;
+    --blocked: #d3d5d9; --blocked-ink: #74787f;
+    --radius: 14px;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #121315; --surface: #1c1d20; --text: #ececea; --muted: #9a9ca2;
+      --line: #2c2d31; --accent: #ececea; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #121315; --surface: #1c1d20; --text: #ececea; --muted: #9a9ca2;
+    --line: #2c2d31; --accent: #ececea; color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  /* браузерный зум страницы выключен: иначе вместе со схемой увеличивается и шторка с парами.
+     У схемы свой зум (щипок, кнопки), текст страницы и так крупный. */
+  html { touch-action: pan-x pan-y; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+  }
+  .page { max-width: 1180px; margin: 0 auto; padding: 20px 16px 40px; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 16px; margin-bottom: 14px; }
+  h1 { font-size: 22px; margin: 0; letter-spacing: -0.01em; }
+  .switch { font-size: 14px; color: var(--muted); text-decoration: none; border-bottom: 1px solid var(--line); }
+  .switch:hover { color: var(--text); }
+
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
+  .controls { display: grid; gap: 14px; margin-bottom: 12px; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; padding: 3px; background: var(--bg); }
+  .seg[hidden] { display: none; }
+  .seg button { border: 0; background: transparent; color: var(--text); font: inherit; padding: 6px 14px; border-radius: 7px; cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: var(--surface); }
+  .datebox { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
+  .datebox input { min-width: 0; }
+  .icon-btn, .now-btn {
+    border: 1px solid var(--line); background: var(--surface); color: var(--text); font: inherit;
+    border-radius: 9px; height: 34px; min-width: 34px; padding: 0 10px; cursor: pointer;
+  }
+  .now-btn { font-weight: 600; }
+  input[type="date"] {
+    font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--line);
+    border-radius: 9px; height: 34px; padding: 0 8px;
+  }
+  .weekday { color: var(--muted); font-size: 14px; min-width: 88px; }
+
+  .time-row { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: center; }
+  .clock { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; min-width: 92px; }
+  .slider-wrap { position: relative; padding-bottom: 20px; }
+  input[type="range"] { width: 100%; accent-color: var(--accent); margin: 0; height: 28px; }
+  .ticks { position: absolute; left: 0; right: 0; bottom: 0; height: 18px; font-size: 11px; color: var(--muted); }
+  .ticks span { position: absolute; transform: translateX(-50%); white-space: nowrap; cursor: pointer; }
+  .ticks span::before { content: ""; position: absolute; left: 50%; top: -6px; width: 1px; height: 5px; background: var(--muted); }
+  .ticks span.active { color: var(--text); font-weight: 600; }
+
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+  .banner { display: none; margin-bottom: 12px; padding: 10px 14px; border-radius: 10px; background: #fff4d6; color: #5c4400; border: 1px solid #f0d98c; font-size: 14px; }
+  .banner.show { display: block; }
+
+  /* ---------- карта ---------- */
+  .map-card { position: relative; background: #fff; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+  /* схему масштабируем сами (viewBox), а не браузером: так шторка с парами не увеличивается.
+     Без приближения палец листает страницу вертикально, щипок достаётся карте;
+     после приближения один палец двигает карту. */
+  .map-card svg { display: block; width: 100%; height: auto; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+  .map-card.zoomed svg { touch-action: none; cursor: grab; }
+  .map-card.dragging svg { cursor: grabbing; }
+  .zoom-ctl { position: absolute; top: 8px; right: 8px; z-index: 3; display: flex; flex-direction: column; gap: 4px; }
+  .zoom-ctl button {
+    width: 34px; height: 34px; border-radius: 9px; border: 1px solid #d9dadd; background: rgba(255,255,255,.94);
+    color: #17181a; font: 600 18px/1 -apple-system, BlinkMacSystemFont, sans-serif; cursor: pointer;
+    box-shadow: 0 1px 3px rgba(0,0,0,.12); padding: 0;
+  }
+  .zoom-ctl button[hidden] { display: none; }
+  .zoom-hint { display: none; margin: 8px 2px 0; font-size: 12px; color: var(--muted); }
+  .map-card svg text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif; }
+  /* заливка лежит под слоем стен; обводка тем же цветом заходит под стену, края получаются ровными */
+  .fill { cursor: pointer; stroke-width: 3; stroke-linejoin: round; transition: fill .15s, stroke .15s; }
+  .fill.s-busy   { fill: var(--busy);   stroke: var(--busy); }
+  .fill.s-soon   { fill: var(--soon);   stroke: var(--soon); }
+  .fill.s-free   { fill: var(--free);   stroke: var(--free); }
+  .fill.s-nodata { fill: var(--nodata); stroke: var(--nodata); }
+  /* столовая полупрозрачная: под ней на плане значки вендинга, их не прячем */
+  .fill.study    { fill: var(--study);  stroke: var(--study); fill-opacity: .72; stroke-opacity: .72; }
+  .fill.study.tile { fill-opacity: 1; stroke-opacity: 1; }
+  .fill.blocked  { fill: url(#hatch);   stroke: var(--blocked); }
+  .fill.s-busy:hover, .fill.s-busy.hl     { fill: var(--busy-hl);   stroke: var(--busy-hl); }
+  .fill.s-soon:hover, .fill.s-soon.hl     { fill: var(--soon-hl);   stroke: var(--soon-hl); }
+  .fill.s-free:hover, .fill.s-free.hl     { fill: var(--free-hl);   stroke: var(--free-hl); }
+  .fill.s-nodata:hover, .fill.s-nodata.hl { fill: var(--nodata-hl); stroke: var(--nodata-hl); }
+  .fill.study:hover, .fill.study.hl       { fill: var(--study-hl);  stroke: var(--study-hl); }
+  .fill.tile { stroke: #fff; stroke-width: 1.2; }
+  .lbl-room { font-weight: 700; text-anchor: middle; dominant-baseline: central; letter-spacing: -0.01em; pointer-events: none; }
+  .lbl-room.s-busy { fill: var(--busy-ink); }
+  .lbl-room.s-soon { fill: var(--soon-ink); }
+  .lbl-room.s-free { fill: var(--free-ink); }
+  .lbl-room.s-nodata { fill: var(--nodata-ink); }
+  .lbl-small { font-weight: 600; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+  .lbl-blocked { fill: var(--blocked-ink); }
+  .lbl-study { fill: var(--study-ink); }
+  .inset-card { fill: #fff; stroke: #cfd1d5; stroke-width: 1; }
+  .inset-title { font-weight: 700; font-size: 10px; fill: #17181a; }
+  .inset-note { font-size: 7px; fill: #6a6d73; }
+
+  .tip {
+    position: fixed; z-index: 20; width: 290px; max-width: calc(100% - 16px); pointer-events: none;
+    background: #17181a; color: #f1f1ee; border-radius: 12px; padding: 12px 14px; font-size: 13px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.25); opacity: 0; transform: translateY(4px); transition: opacity .12s, transform .12s;
+  }
+  .tip.show { opacity: 1; transform: none; }
+  .tip.pinned { pointer-events: auto; }
+  .tip h3 { margin: 0 0 2px; font-size: 16px; padding-right: 28px; }
+  .tip .close {
+    display: none; position: absolute; top: 8px; right: 8px; width: 30px; height: 30px; border: 0; border-radius: 8px;
+    background: rgba(255,255,255,.1); color: #f1f1ee; font-size: 18px; line-height: 1; cursor: pointer;
+  }
+  .tip.pinned .close { display: block; }
+  .tip .st { margin: 0 0 10px; color: #cfd0cc; }
+  .tip .lbl { color: #9b9d98; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; margin: 8px 0 5px; }
+  .slots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+  .slot { border-radius: 6px; padding: 3px 0; text-align: center; font-variant-numeric: tabular-nums; font-size: 12px; }
+  .slot.f { background: rgba(42,168,101,.28); color: #bff0d3; }
+  .slot.b { background: rgba(229,72,77,.28); color: #ffc9cb; text-decoration: line-through; text-decoration-color: rgba(255,201,203,.5); }
+  .slot.past { opacity: .38; }
+  .slot.now { outline: 1.5px solid #f1f1ee; }
+  .evs { margin: 0; padding: 0; list-style: none; display: grid; gap: 3px; }
+  .evs li { display: grid; grid-template-columns: 84px 1fr; gap: 6px; }
+  .evs .t { font-variant-numeric: tabular-nums; color: #cfd0cc; }
+  .evs .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .evs li.cur .n, .evs li.cur .t { color: #ffb4b7; }
+
+  .lists { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 14px; }
+  .list h2 { font-size: 14px; margin: 0 0 8px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    border: 1px solid var(--line); background: var(--bg); color: var(--text); font: inherit; font-size: 13px;
+    border-radius: 8px; padding: 4px 8px; cursor: pointer; font-variant-numeric: tabular-nums;
+  }
+  .chip small { color: var(--muted); margin-left: 4px; }
+  .empty { color: var(--muted); font-size: 13px; }
+  footer { margin-top: 18px; color: var(--muted); font-size: 12px; }
+  footer p { margin: 0 0 6px; }
+  footer .author { margin-top: 12px; font-size: 13px; color: var(--text); }
+  footer a { color: inherit; font-weight: 600; }
+
+  @media (max-width: 720px) {
+    h1 { font-size: 19px; }
+    .controls .row { display: grid; grid-template-columns: 1fr auto; }
+    .seg { grid-column: 1 / -1; justify-self: start; }
+    .datebox { width: 100%; grid-column: 1 / -1; }
+    .datebox input { flex: 1; }
+    .time-row { grid-template-columns: 1fr; gap: 4px; }
+    .ticks span:nth-child(even) { display: none; }
+    .clock { font-size: 24px; min-width: 72px; }
+    .lists { grid-template-columns: 1fr; }
+    .zoom-hint { display: block; }
+    /* на телефоне кнопки масштаба компактнее и полупрозрачные: не закрывают угол схемы */
+    .zoom-ctl { top: 5px; right: 5px; gap: 3px; }
+    .zoom-ctl button { width: 26px; height: 26px; font-size: 15px; border-radius: 7px; background: rgba(255,255,255,.8); }
+    /* пока открыта шторка, внизу страницы есть запас, чтобы комнату можно было прокрутить над ней */
+    body.sheet-open { padding-bottom: 64vh; }
+    /* на телефоне подсказка это нижняя шторка на всю ширину */
+    .tip { left: 8px !important; right: 8px; top: auto !important; bottom: 8px; width: auto; max-width: none;
+           max-height: 62vh; overflow-y: auto; padding: 14px 16px calc(14px + env(safe-area-inset-bottom)); }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <h1>Где ботать в Телеграфе</h1>
+    <a class="switch" id="layoutLink" href="#"></a>
+  </header>
+
+  <div class="map-card" id="mapCard">
+    <svg id="map" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="План этажа">
+      <defs>
+        <pattern id="hatch" patternUnits="userSpaceOnUse" width="5" height="5" patternTransform="rotate(45)">
+          <rect width="5" height="5" fill="#d3d5d9"/>
+          <line x1="0" y1="0" x2="0" y2="5" stroke="#b3b6bc" stroke-width="1.2"/>
+        </pattern>
+      </defs>
+      <image id="bg" x="0" y="0" width="1073" height="810" preserveAspectRatio="none" pointer-events="none"/>
+      <g id="fills"></g>
+      <image id="walls" x="0" y="0" width="1073" height="810" preserveAspectRatio="none" pointer-events="none"/>
+      <g id="labels"></g>
+      <g id="inset"></g>
+    </svg>
+    <div class="zoom-ctl">
+      <button type="button" id="zoomIn" aria-label="Приблизить">+</button>
+      <button type="button" id="zoomOut" aria-label="Отдалить">−</button>
+      <button type="button" id="zoomReset" aria-label="Показать всю схему" hidden>⤢</button>
+    </div>
+  </div>
+  <div class="zoom-hint">Схему можно приблизить двумя пальцами и двигать одним.</div>
+
+  <section class="panel controls" aria-label="Параметры">
+    <div class="row">
+      <div class="seg" role="group" aria-label="Этаж" id="floorSeg"></div>
+      <div class="datebox">
+        <button class="icon-btn" id="prevDay" aria-label="Предыдущий день">‹</button>
+        <input type="date" id="dateInput" aria-label="Дата">
+        <button class="icon-btn" id="nextDay" aria-label="Следующий день">›</button>
+      </div>
+      <span class="weekday" id="weekday"></span>
+      <button class="now-btn" id="nowBtn">Сейчас</button>
+    </div>
+    <div class="time-row">
+      <div class="clock" id="clock">--:--</div>
+      <div class="slider-wrap">
+        <input type="range" id="timeRange" min="450" max="1350" step="5" aria-label="Время">
+        <div class="ticks" id="ticks"></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="banner" id="banner"></div>
+
+  <section class="lists" id="lists"></section>
+
+  <footer>
+    <p id="footer"></p>
+    <p class="author">Создатель и по всем вопросам: <a href="https://t.me/oobeemee" target="_blank" rel="noopener">@oobeemee</a></p>
+  </footer>
+</div>
+
+<div class="tip" id="tip" role="dialog" aria-live="polite"></div>
+
+<script>
+const DATA = /*__DATA__*/null;
+const SVGNS = "http://www.w3.org/2000/svg";
+const WEEKDAYS = ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"];
+// Полные названия для подсказки и короткие для подписи на карте
+const BLOCKED_NAMES = { "Work in progress": "в работе", "Учебный офис": "учебный офис", "Техно точка": "техно точка",
+                        "Кухня": "кухня для сотрудников", "Офис": "офис" };
+const BLOCKED_SHORT = { "Кухня": "служебная", "Техно точка": "техно", "Учебный офис": "уч. офис" };
+const COMBINED = DATA.layout === "combined";
+
+const $ = (id) => document.getElementById(id);
+const state = { floor: "3", date: "", t: 600, pinned: null, hover: null, shapes: [] };
+
+const toMin = (s) => { const [h, m] = s.split(":").map(Number); return h * 60 + m; };
+const fmt = (m) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+const SLOTS = DATA.slots.map(([a, b]) => [toMin(a), toMin(b)]);
+
+function mskNow() {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Moscow", year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hourCycle: "h23"
+  }).formatToParts(new Date()).map((p) => [p.type, p.value]));
+  return { date: `${parts.year}-${parts.month}-${parts.day}`, t: Number(parts.hour) * 60 + Number(parts.minute) };
+}
+
+function shiftDate(iso, delta) {
+  const d = new Date(iso + "T12:00:00Z");
+  d.setUTCDate(d.getUTCDate() + delta);
+  return d.toISOString().slice(0, 10);
+}
+
+const inRange = (date) => DATA.range && date >= DATA.range[0] && date <= DATA.range[1];
+
+function eventsFor(room, date) {
+  const day = DATA.days[date];
+  return day && day[room] ? day[room] : [];
+}
+
+// Статус аудитории в момент t
+function roomStatus(room, date, t) {
+  if (!inRange(date)) return { s: "nodata" };
+  const evs = eventsFor(room, date);
+  const GAP = 15;  // перемена между парами: 10 минут, вечером 15
+  let current = evs.filter((e) => e[0] <= t && t < e[1]);
+  let brk = false;
+  if (!current.length) {
+    // перемена: пара только что закончилась и следующая начнётся в пределах перемены,
+    // значит аудитория занята (красная), а не свободна
+    const ended = evs.filter((e) => e[1] <= t && t - e[1] <= GAP);
+    const upcoming = evs.filter((e) => e[0] > t && e[0] - t <= GAP).sort((a, b) => a[0] - b[0]);
+    if (ended.length && upcoming.length) { current = [upcoming[0]]; brk = true; }
+  }
+  if (current.length) {
+    // когда освободится по-настоящему: перемену до 15 минут считаем частью занятости
+    let freeAt = t, moved = true, chained = brk;
+    while (moved) {
+      moved = false;
+      for (const e of evs) {
+        if (e[0] <= freeAt + GAP && e[1] > freeAt) {
+          if (e[0] > freeAt) chained = true;
+          freeAt = e[1]; moved = true;
+        }
+      }
+    }
+    return { s: "busy", until: freeAt, current, chained, brk };
+  }
+  const next = evs.filter((e) => e[0] > t).sort((a, b) => a[0] - b[0])[0];
+  if (next) return { s: "soon", until: next[0], next };
+  return { s: "free" };
+}
+
+function statusLine(st) {
+  if (st.s === "busy") return `Занята до ${fmt(st.until)}${st.chained ? ", пары идут подряд" : ""}`;
+  if (st.s === "soon") return `Свободна до ${fmt(st.until)}`;
+  if (st.s === "free") return "Свободна до конца дня";
+  return "Нет расписания на эту дату";
+}
+const shortLine = (st) => (st.s === "busy" || st.s === "soon") ? `до ${fmt(st.until)}` : "";
+
+/* ---------- масштаб и перемещение схемы ---------- */
+
+const MAX_ZOOM = 5;
+const view = { base: [0, 0, 1, 1], x: 0, y: 0, w: 1, h: 1 };
+
+function applyView() {
+  const [bx, by, bw, bh] = view.base;
+  view.w = Math.min(bw, Math.max(bw / MAX_ZOOM, view.w));
+  view.h = view.w * bh / bw;
+  view.x = Math.min(bx + bw - view.w, Math.max(bx, view.x));
+  view.y = Math.min(by + bh - view.h, Math.max(by, view.y));
+  $("map").setAttribute("viewBox", `${view.x} ${view.y} ${view.w} ${view.h}`);
+  const zoomed = view.w < bw - 0.5;
+  $("mapCard").classList.toggle("zoomed", zoomed);
+  $("zoomReset").hidden = !zoomed;
+}
+
+function resetView() {
+  [view.x, view.y, view.w, view.h] = view.base;
+  applyView();
+}
+
+// экранная точка -> координаты плана
+function toPlan(cx, cy) {
+  const r = $("map").getBoundingClientRect();
+  return [view.x + (cx - r.left) / r.width * view.w, view.y + (cy - r.top) / r.height * view.h];
+}
+
+// приблизить в factor раз, оставив точку плана (px, py) на месте
+function zoomAt(factor, px, py) {
+  const nw = view.w / factor;
+  view.x = px - (px - view.x) * (nw / view.w);
+  view.y = py - (py - view.y) * (nw / view.w);
+  view.w = nw;
+  applyView();
+}
+
+function zoomCenter(factor) {
+  zoomAt(factor, view.x + view.w / 2, view.y + view.h / 2);
+}
+
+// показать точку плана по центру (если схема приближена)
+function centerOn(px, py) {
+  if (view.w >= view.base[2] - 0.5) return;
+  view.x = px - view.w / 2;
+  view.y = py - view.h / 2;
+  applyView();
+}
+
+function setupGestures() {
+  const svg = $("map");
+  const pointers = new Map();
+  let g = null;             // текущий жест
+  let suppressClick = false;
+
+  const startPan = (p) => ({ type: "pan", sx: p.x, sy: p.y, vx: view.x, vy: view.y, moved: false, id: p.id });
+  const pinchInfo = () => {
+    const [a, b] = [...pointers.values()];
+    return { dist: Math.hypot(a.x - b.x, a.y - b.y) || 1, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 };
+  };
+
+  svg.addEventListener("pointerdown", (e) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, id: e.pointerId });
+    if (pointers.size === 1) g = startPan(pointers.get(e.pointerId));
+    else if (pointers.size === 2) {
+      const pi = pinchInfo();
+      g = { type: "pinch", dist: pi.dist, plan: toPlan(pi.mx, pi.my), w: view.w, moved: true };
+      for (const id of pointers.keys()) { try { svg.setPointerCapture(id); } catch (err) {} }
+    }
+  });
+
+  svg.addEventListener("pointermove", (e) => {
+    const p = pointers.get(e.pointerId);
+    if (!p || !g) return;
+    p.x = e.clientX; p.y = e.clientY;
+    const r = svg.getBoundingClientRect();
+    if (g.type === "pinch" && pointers.size >= 2) {
+      const pi = pinchInfo();
+      const bw = view.base[2];
+      view.w = Math.min(bw, Math.max(bw / MAX_ZOOM, g.w * g.dist / pi.dist));
+      view.h = view.w * view.base[3] / bw;
+      // точка плана под пальцами остаётся под пальцами
+      view.x = g.plan[0] - (pi.mx - r.left) / r.width * view.w;
+      view.y = g.plan[1] - (pi.my - r.top) / r.height * view.h;
+      applyView();
+      e.preventDefault();
+    } else if (g.type === "pan" && e.pointerId === g.id) {
+      const dx = e.clientX - g.sx, dy = e.clientY - g.sy;
+      if (!g.moved && Math.hypot(dx, dy) < 6) return;
+      if (!$("mapCard").classList.contains("zoomed")) return;  // без приближения двигать нечего
+      if (!g.moved) {
+        g.moved = true;
+        try { svg.setPointerCapture(e.pointerId); } catch (err) {}  // захват только после сдвига, иначе тап не попадёт в комнату
+        $("mapCard").classList.add("dragging");
+      }
+      view.x = g.vx - dx / r.width * view.w;
+      view.y = g.vy - dy / r.height * view.h;
+      applyView();
+    }
+  });
+
+  const end = (e) => {
+    if (!pointers.has(e.pointerId)) return;
+    pointers.delete(e.pointerId);
+    if (g && g.moved) suppressClick = true;
+    if (pointers.size === 1) {
+      // из щипка остался один палец: продолжаем перемещение с его позиции, без скачка
+      g = startPan([...pointers.values()][0]);
+      g.moved = true;
+    } else if (pointers.size === 0) {
+      g = null;
+      $("mapCard").classList.remove("dragging");
+      setTimeout(() => { suppressClick = false; }, 0);
+    }
+  };
+  svg.addEventListener("pointerup", end);
+  svg.addEventListener("pointercancel", end);
+
+  // после перетаскивания или щипка клик не должен открывать комнату
+  svg.addEventListener("click", (e) => {
+    if (suppressClick) { e.stopPropagation(); e.preventDefault(); suppressClick = false; }
+  }, true);
+
+  // щипок на тачпаде приходит как wheel с ctrlKey; обычное колесо листает страницу
+  svg.addEventListener("wheel", (e) => {
+    if (!e.ctrlKey) return;
+    e.preventDefault();
+    const [px, py] = toPlan(e.clientX, e.clientY);
+    zoomAt(Math.exp(-e.deltaY * 0.01), px, py);
+  }, { passive: false });
+
+  $("zoomIn").addEventListener("click", (e) => { e.stopPropagation(); zoomCenter(1.6); });
+  $("zoomOut").addEventListener("click", (e) => { e.stopPropagation(); zoomCenter(1 / 1.6); });
+  $("zoomReset").addEventListener("click", (e) => { e.stopPropagation(); resetView(); });
+}
+
+/* ---------- построение карты ---------- */
+
+function el(tag, attrs, parent) {
+  const node = document.createElementNS(SVGNS, tag);
+  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+  if (parent) parent.appendChild(node);
+  return node;
+}
+
+// Размер номера: чтобы влез в самое широкое место комнаты (r = радиус вписанного круга)
+function fontFor(text, r) {
+  const width = [...text].reduce((w, ch) => w + (ch === "." ? 0.3 : 0.62), 0);
+  return Math.max(8, Math.min(15, (2 * r * 0.86) / width));
+}
+
+function bindShape(sh, node) {
+  // показ по pointermove, а не pointerenter: курсор мог уже стоять на комнате при перерисовке
+  node.addEventListener("pointermove", (ev) => {
+    if (ev.pointerType !== "mouse" || state.pinned) return;
+    if (state.hover !== sh) { state.hover = sh; showTip(sh, ev); }
+    else positionTip(ev.clientX, ev.clientY);
+  });
+  node.addEventListener("pointerleave", (ev) => {
+    if (ev.pointerType !== "mouse" || state.pinned) return;
+    hideTip();
+  });
+  node.addEventListener("click", (ev) => { ev.stopPropagation(); pinTip(sh, ev.clientX, ev.clientY); });
+}
+
+function drawFloorShapes(floor) {
+  const fills = $("fills"), labels = $("labels");
+  DATA.floors[floor].shapes.forEach((src) => {
+    const sh = { ...src, floor };
+    const points = sh.poly.map((p) => p.join(",")).join(" ");
+    sh.fillEl = el("polygon", { points, class: `fill ${sh.kind}` }, fills);
+    const [cx, cy] = sh.center;
+    if (sh.kind === "room") {
+      sh.labelEl = el("text", { x: cx, y: cy, class: "lbl-room", "font-size": fontFor(sh.id, sh.r).toFixed(1) }, labels);
+      sh.labelEl.textContent = sh.id;
+    } else if (sh.kind === "study") {
+      const t1 = el("text", { x: cx, y: cy - 7, class: "lbl-small lbl-study", "font-size": 13 }, labels);
+      t1.textContent = "Столовая";
+      const t2 = el("text", { x: cx, y: cy + 8, class: "lbl-small lbl-study", "font-size": 9 }, labels);
+      t2.textContent = "можно ботать";
+    } else {
+      // подпись только если влезает в самое широкое место зоны, иначе название есть в подсказке
+      const name = BLOCKED_SHORT[sh.name] || BLOCKED_NAMES[sh.name] || sh.name.toLowerCase();
+      const size = Math.min(8, (2 * sh.r * 0.9) / (0.56 * name.length));
+      if (size >= 4.5) {
+        const t = el("text", { x: cx, y: cy, class: "lbl-small lbl-blocked", "font-size": size.toFixed(1) }, labels);
+        t.textContent = name;
+      }
+    }
+    bindShape(sh, sh.fillEl);
+    state.shapes.push(sh);
+  });
+}
+
+// Врезка «2 этаж» в пустом правом нижнем углу плана 3 этажа (режим «всё на одном экране»)
+function drawInset() {
+  const g = $("inset");
+  const f2 = DATA.floors["2"].shapes;
+  const order = ["S203", "S202.2", "S202.1", "E201"];  // с запада на восток, как на плане
+  const rooms = order.map((id) => f2.find((s) => s.id === id)).filter(Boolean);
+  const study = f2.find((s) => s.kind === "study");
+  const box = DATA.inset;  // [x, y, w, h] в координатах плана
+  const [x0, y0, w, h] = box;
+  const pad = 6, title = 14, gap = 4;
+  el("rect", { x: x0, y: y0, width: w, height: h, rx: 8, class: "inset-card" }, g);
+  const tt = el("text", { x: x0 + pad, y: y0 + pad + 8, class: "inset-title" }, g);
+  tt.textContent = "2 этаж";
+  const note = el("text", { x: x0 + w - pad, y: y0 + pad + 8, class: "inset-note", "text-anchor": "end" }, g);
+  note.textContent = "южная сторона и E201";
+  const tileW = (w - 2 * pad - gap * (rooms.length - 1)) / rooms.length;
+  const tileH = 34;
+  const ty = y0 + pad + title;
+  rooms.forEach((src, i) => {
+    const sh = { ...src, floor: "2" };
+    const tx = x0 + pad + i * (tileW + gap);
+    sh.fillEl = el("rect", { x: tx, y: ty, width: tileW, height: tileH, rx: 5, class: "fill room tile" }, g);
+    sh.center = [tx + tileW / 2, ty + tileH / 2];
+    sh.labelEl = el("text", { x: tx + tileW / 2, y: ty + tileH / 2, class: "lbl-room", "font-size": fontFor(sh.id, tileW / 2 - 2).toFixed(1) }, g);
+    sh.labelEl.textContent = sh.id;
+    bindShape(sh, sh.fillEl);
+    state.shapes.push(sh);
+  });
+  if (study) {
+    const sh = { ...study, floor: "2" };
+    const sy = ty + tileH + gap;
+    const sw = w - 2 * pad, shh = y0 + h - pad - sy;
+    sh.fillEl = el("rect", { x: x0 + pad, y: sy, width: sw, height: shh, rx: 5, class: "fill study tile" }, g);
+    sh.center = [x0 + pad + sw / 2, sy + shh / 2];
+    const t = el("text", { x: x0 + pad + sw / 2, y: sy + shh / 2, class: "lbl-small lbl-study", "font-size": 9.5 }, g);
+    t.textContent = "Столовая: можно ботать";
+    bindShape(sh, sh.fillEl);
+    state.shapes.push(sh);
+  }
+}
+
+function renderMap() {
+  hideTip(true);
+  state.shapes = [];
+  ["fills", "labels", "inset"].forEach((id) => { $(id).innerHTML = ""; });
+  const floor = COMBINED ? "3" : state.floor;
+  view.base = DATA.viewBox.slice();
+  resetView();
+  $("bg").setAttribute("href", DATA.floors[floor].background);
+  $("walls").setAttribute("href", DATA.floors[floor].walls);
+  drawFloorShapes(floor);
+  if (COMBINED) drawInset();
+  document.querySelectorAll("#floorSeg button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.floor === state.floor)));
+  update();
+}
+
+function buildFloorButtons() {
+  const seg = $("floorSeg");
+  if (COMBINED) { seg.hidden = true; return; }
+  Object.keys(DATA.floors).sort().forEach((f) => {
+    const b = document.createElement("button");
+    b.textContent = `${f} этаж`;
+    b.dataset.floor = f;
+    b.addEventListener("click", () => { state.floor = f; savePrefs(); renderMap(); });
+    seg.appendChild(b);
+  });
+}
+
+function buildTicks() {
+  const range = $("timeRange");
+  const min = Number(range.min), max = Number(range.max);
+  $("ticks").innerHTML = "";
+  SLOTS.forEach(([a], i) => {
+    const s = document.createElement("span");
+    s.textContent = fmt(a);
+    s.style.left = `${((a - min) / (max - min)) * 100}%`;
+    s.dataset.slot = i;
+    s.title = `Пара ${i + 1}: ${fmt(a)}-${fmt(SLOTS[i][1])}`;
+    s.addEventListener("click", () => { state.t = a; update(); });
+    $("ticks").appendChild(s);
+  });
+}
+
+/* ---------- обновление статусов ---------- */
+
+function update() {
+  const range = $("timeRange");
+  state.t = Math.min(Math.max(state.t, Number(range.min)), Number(range.max));
+  range.value = state.t;
+  $("clock").textContent = fmt(state.t);
+  $("dateInput").value = state.date;
+  $("weekday").textContent = WEEKDAYS[new Date(state.date + "T12:00:00Z").getUTCDay()];
+  document.querySelectorAll("#ticks span").forEach((s) => {
+    const [a, b] = SLOTS[Number(s.dataset.slot)];
+    s.classList.toggle("active", state.t >= a && state.t < b);
+  });
+
+  const banner = $("banner");
+  if (!inRange(state.date)) {
+    banner.textContent = DATA.range
+      ? `На ${formatDate(state.date)} расписания нет: в таблице даты с ${formatDate(DATA.range[0])} по ${formatDate(DATA.range[1])}. Загрузи свежую выгрузку.`
+      : "В таблице нет занятий в аудиториях S, N, W, E.";
+    banner.classList.add("show");
+  } else banner.classList.remove("show");
+
+  const groups = { free: [], soon: [], busy: [] };
+  state.shapes.forEach((sh) => {
+    if (sh.kind !== "room") return;
+    const st = roomStatus(sh.id, state.date, state.t);
+    sh.st = st;
+    if (groups[st.s]) groups[st.s].push(sh);
+    for (const node of [sh.fillEl, sh.labelEl]) {
+      node.classList.remove("s-busy", "s-soon", "s-free", "s-nodata");
+      node.classList.add(`s-${st.s}`);
+    }
+  });
+
+  renderLists(groups);
+  if (state.pinned) fillTip(state.pinned);
+  else if (state.hover) fillTip(state.hover);
+}
+
+function renderLists(groups) {
+  const byName = (a, b) => a.id.localeCompare(b.id, "ru", { numeric: true });
+  const blocks = [
+    ["free", "Свободны до конца дня", groups.free.sort(byName)],
+    ["soon", "Свободны сейчас, позже пара", groups.soon.sort((a, b) => b.st.until - a.st.until || byName(a, b))],
+    ["busy", "Заняты", groups.busy.sort((a, b) => a.st.until - b.st.until || byName(a, b))],
+  ];
+  $("lists").innerHTML = "";
+  if (!inRange(state.date)) return;
+  blocks.forEach(([key, title, items]) => {
+    const box = document.createElement("div");
+    box.className = "panel list";
+    box.innerHTML = `<h2><i class="dot" style="background:var(--${key})"></i>${title}</h2>`;
+    const chips = document.createElement("div");
+    chips.className = "chips";
+    if (!items.length) chips.innerHTML = `<span class="empty">нет</span>`;
+    items.forEach((sh) => {
+      const c = document.createElement("button");
+      c.className = "chip";
+      const extra = shortLine(sh.st);
+      c.innerHTML = `${sh.id}${extra ? `<small>${extra}</small>` : ""}`;
+      c.addEventListener("mouseenter", () => sh.fillEl.classList.add("hl"));
+      c.addEventListener("mouseleave", () => { if (state.pinned !== sh) sh.fillEl.classList.remove("hl"); });
+      c.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        // прокручиваем к комнате мгновенно, потом открываем подсказку у неё
+        ignoreScrollUntil = Date.now() + 400;
+        centerOn(sh.center[0], sh.center[1]);
+        sh.fillEl.scrollIntoView({ behavior: "auto", block: "center" });
+        const r = sh.fillEl.getBoundingClientRect();
+        pinTip(sh, r.left + r.width / 2, r.top + r.height / 2);
+      });
+      chips.appendChild(c);
+    });
+    box.appendChild(chips);
+    $("lists").appendChild(box);
+  });
+}
+
+/* ---------- подсказка ---------- */
+
+const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const CLOSE_BTN = `<button class="close" type="button" aria-label="Закрыть" onclick="hideTip(true)">×</button>`;
+
+function fillTip(sh) {
+  const tip = $("tip");
+  if (sh.kind === "study") {
+    tip.innerHTML = `<h3>Столовая · 2 этаж</h3><p class="st" style="margin:0">Обеденный зал открыт для всех: здесь можно заниматься, когда свободных аудиторий нет.</p>` + CLOSE_BTN;
+    return;
+  }
+  if (sh.kind !== "room") {
+    const name = BLOCKED_NAMES[sh.name] || sh.name;
+    tip.innerHTML = `<h3>${escapeHtml(name[0].toUpperCase() + name.slice(1))}</h3><p class="st" style="margin:0">Недоступно студентам</p>` + CLOSE_BTN;
+    return;
+  }
+  const st = roomStatus(sh.id, state.date, state.t);
+  const color = { busy: "#e5484d", soon: "#c3d334", free: "#2aa865", nodata: "#b9c0cc" }[st.s];
+  let html = `<h3>${sh.id} · ${sh.floor} этаж</h3>
+    <p class="st"><i class="dot" style="background:${color}"></i>${statusLine(st)}`;
+  if (st.s === "busy") {
+    const title = escapeHtml(DATA.titles[st.current[0][2]]);
+    html += `<br><span style="color:#9b9d98">${st.brk ? `перемена, в ${fmt(st.current[0][0])}: ${title}` : `сейчас: ${title}`}</span>`;
+  }
+  html += `</p>`;
+  if (st.s !== "nodata") {
+    const evs = eventsFor(sh.id, state.date).slice().sort((a, b) => a[0] - b[0]);
+    const freeCount = SLOTS.filter(([a, b]) => !evs.some((e) => e[0] < b && e[1] > a)).length;
+    html += `<div class="lbl">Пары ${formatDate(state.date)}: свободно ${freeCount} из ${SLOTS.length}</div><div class="slots">`;
+    SLOTS.forEach(([a, b]) => {
+      const busy = evs.some((e) => e[0] < b && e[1] > a);
+      const cls = [busy ? "b" : "f", b <= state.t ? "past" : "", state.t >= a && state.t < b ? "now" : ""].join(" ");
+      html += `<div class="slot ${cls}" title="${busy ? "занято" : "свободно"}">${fmt(a)}-${fmt(b)}</div>`;
+    });
+    html += `</div>`;
+    if (evs.length) {
+      html += `<div class="lbl">Занятия в этот день</div><ul class="evs">`;
+      evs.forEach((e) => {
+        const cur = e[0] <= state.t && state.t < e[1];
+        const kind = DATA.kinds[e[3]];
+        const title = escapeHtml(DATA.titles[e[2]]);
+        html += `<li class="${cur ? "cur" : ""}"><span class="t">${fmt(e[0])}-${fmt(e[1])}</span>
+          <span class="n" title="${title}">${title}${kind ? ` · ${escapeHtml(kind.toLowerCase())}` : ""}</span></li>`;
+      });
+      html += `</ul>`;
+    } else {
+      html += `<div class="lbl">Занятий в этот день нет</div>`;
+    }
+  }
+  tip.innerHTML = html + CLOSE_BTN;
+}
+
+let ignoreScrollUntil = 0;
+const isNarrow = () => window.matchMedia("(max-width: 720px)").matches;
+
+function positionTip(cx, cy) {
+  if (isNarrow()) return;  // шторка, позиция задана в CSS
+  const tip = $("tip");
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const tw = tip.offsetWidth, th = tip.offsetHeight;
+  let x = cx + 16, y = cy + 16;
+  if (x + tw > vw - 8) x = cx - tw - 16;
+  if (x < 8) x = Math.max(8, Math.min(vw - tw - 8, cx - tw / 2));
+  if (y + th > vh - 8) y = cy - th - 16;
+  if (y < 8) y = Math.max(8, vh - th - 8);
+  tip.style.left = `${x}px`;
+  tip.style.top = `${y}px`;
+}
+
+function showTip(sh, ev) {
+  fillTip(sh);
+  $("tip").classList.add("show");
+  positionTip(ev.clientX, ev.clientY);
+}
+
+function pinTip(sh, cx, cy) {
+  if (state.pinned) state.pinned.fillEl.classList.remove("hl");
+  state.pinned = sh;
+  sh.fillEl.classList.add("hl");
+  fillTip(sh);
+  $("tip").classList.add("show", "pinned");
+  positionTip(cx, cy);
+  if (isNarrow()) {
+    document.body.classList.add("sheet-open");
+    requestAnimationFrame(() => {
+      const r = sh.fillEl.getBoundingClientRect();
+      const sheetTop = window.innerHeight - $("tip").offsetHeight - 8;
+      if (r.top + r.height / 2 > sheetTop - 12) window.scrollBy({ top: r.top + r.height / 2 - sheetTop + 40 });
+    });
+  }
+}
+
+function hideTip(force) {
+  if (state.pinned && !force) return;
+  if (state.pinned) state.pinned.fillEl.classList.remove("hl");
+  state.pinned = null;
+  state.hover = null;
+  $("tip").classList.remove("show", "pinned");
+  document.body.classList.remove("sheet-open");
+}
+
+/* ---------- прочее ---------- */
+
+function formatDate(iso) {
+  const [, m, d] = iso.split("-");
+  return `${d}.${m}`;
+}
+
+function savePrefs() {
+  try { localStorage.setItem("cu-rooms-floor", state.floor); } catch (e) {}
+}
+
+function loadPrefs() {
+  try {
+    const f = localStorage.getItem("cu-rooms-floor");
+    if (f && DATA.floors[f]) state.floor = f;
+  } catch (e) {}
+}
+
+function setNow() {
+  const now = mskNow();
+  state.date = now.date;
+  state.t = now.t;
+  update();
+}
+
+function init() {
+  $("footer").textContent = "Данные: выгрузка расписания cu-schedule.ru, только аудитории S, N, W, E кампуса ЦТ. "
+    + "Бронирования вне расписания (мероприятия, встречи) сюда не попадают, аудитория может быть занята и без пары. Время московское.";
+  if (DATA.range) { $("dateInput").min = DATA.range[0]; $("dateInput").max = DATA.range[1]; }
+  // переключатель между версиями: файлы лежат рядом и локально, и на хостинге
+  $("layoutLink").href = COMBINED ? "floors.html" : "index.html";
+  $("layoutLink").textContent = COMBINED ? "Смотреть по этажам" : "Всё на одном экране";
+  loadPrefs();
+  buildFloorButtons();
+  buildTicks();
+  const now = mskNow();
+  state.date = now.date;
+  state.t = now.t;
+
+  $("timeRange").addEventListener("input", (e) => { state.t = Number(e.target.value); update(); });
+  $("dateInput").addEventListener("change", (e) => { if (e.target.value) { state.date = e.target.value; update(); } });
+  $("prevDay").addEventListener("click", () => { state.date = shiftDate(state.date, -1); update(); });
+  $("nextDay").addEventListener("click", () => { state.date = shiftDate(state.date, 1); update(); });
+  $("nowBtn").addEventListener("click", setNow);
+  document.addEventListener("click", (e) => { if (!$("tip").contains(e.target)) hideTip(true); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") hideTip(true); });
+  window.addEventListener("scroll", () => {
+    if (!isNarrow() && Date.now() > ignoreScrollUntil) hideTip(true);
+  }, { passive: true });
+  // На телефоне прокрутка прячет адресную строку и шлёт resize: закрываем подсказку
+  // только если реально изменилась ширина (поворот экрана, окно).
+  let lastWidth = window.innerWidth;
+  window.addEventListener("resize", () => {
+    if (window.innerWidth !== lastWidth) { lastWidth = window.innerWidth; hideTip(true); }
+  });
+  setupGestures();
+  renderMap();
+}
+
+init();
+</script>
+</body>
+</html>

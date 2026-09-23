@@ -1,0 +1,69 @@
+name: Обновить карту и опубликовать
+
+on:
+  schedule:
+    # 10:00 МСК = 07:00 UTC (Россия не переходит на летнее время)
+    - cron: "0 7 * * *"
+  workflow_dispatch: {}   # кнопка "Run workflow" в вкладке Actions для ручного запуска
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # закоммитить data/last-good.json (только числа, без ФИО)
+    outputs:
+      built: ${{ steps.build.outcome == 'success' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Установить зависимости
+        run: pip install openpyxl
+
+      - name: Скачать выгрузку и пересобрать карту
+        id: build
+        run: python3 auto_update.py
+
+      - name: Сохранить статистику для проверки следующего запуска
+        if: success()
+        run: |
+          if ! git diff --quiet -- data/last-good.json; then
+            git config user.name "cu-free-rooms-bot"
+            git config user.email "actions@users.noreply.github.com"
+            git add data/last-good.json
+            git commit -m "Обновление расписания $(date -u +%Y-%m-%d)"
+            git push
+          else
+            echo "статистика не изменилась, коммитить нечего"
+          fi
+
+      - name: Опубликовать на GitHub Pages
+        if: success()
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: update
+    # update job may fail (bad export): still read its outputs to skip deploy cleanly
+    if: always() && needs.update.outputs.built == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
