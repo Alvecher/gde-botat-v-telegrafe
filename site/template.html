@@ -94,7 +94,6 @@
     box-shadow: 0 1px 3px rgba(0,0,0,.12); padding: 0;
   }
   .zoom-ctl button[hidden] { display: none; }
-  .zoom-hint { display: none; margin: 8px 2px 0; font-size: 12px; color: var(--muted); }
   .map-card svg text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif; }
   /* заливка лежит под слоем стен; обводка тем же цветом заходит под стену, края получаются ровными */
   .fill { cursor: pointer; stroke-width: 3; stroke-linejoin: round; transition: fill .15s, stroke .15s; }
@@ -175,7 +174,6 @@
     .ticks span:nth-child(even) { display: none; }
     .clock { font-size: 24px; min-width: 72px; }
     .lists { grid-template-columns: 1fr; }
-    .zoom-hint { display: block; }
     /* на телефоне кнопки масштаба компактнее и полупрозрачные: не закрывают угол схемы */
     .zoom-ctl { top: 5px; right: 5px; gap: 3px; }
     .zoom-ctl button { width: 26px; height: 26px; font-size: 15px; border-radius: 7px; background: rgba(255,255,255,.8); }
@@ -214,8 +212,6 @@
       <button type="button" id="zoomReset" aria-label="Показать всю схему" hidden>⤢</button>
     </div>
   </div>
-  <div class="zoom-hint">Схему можно приблизить двумя пальцами и двигать одним.</div>
-
   <section class="panel controls" aria-label="Параметры">
     <div class="row">
       <div class="seg" role="group" aria-label="Этаж" id="floorSeg"></div>
