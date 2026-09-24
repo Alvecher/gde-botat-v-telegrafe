@@ -24,6 +24,7 @@ import zipfile
 from pathlib import Path
 
 import build_site
+from build_site import MSK
 
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
@@ -40,7 +41,7 @@ LAST_GOOD_META = DATA / "last-good.json"
 
 
 def log(msg: str) -> None:
-    print(f"[{dt.datetime.now():%Y-%m-%d %H:%M:%S}] {msg}", flush=True)
+    print(f"[{dt.datetime.now(MSK):%Y-%m-%d %H:%M:%S} мск] {msg}", flush=True)
 
 
 def download(dest: Path) -> None:
@@ -101,7 +102,7 @@ def main() -> int:
         return 1
     part.replace(LAST_GOOD_XLSX)
     LAST_GOOD_META.write_text(json.dumps({
-        "updatedAt": dt.datetime.now().isoformat(timespec="seconds"),
+        "updatedAt": dt.datetime.now(MSK).isoformat(timespec="seconds"),
         "rows": stats["rows"], "events": stats["events"], "range": stats["range"],
     }, ensure_ascii=False, indent=1), "utf-8")
     log(f"карта обновлена: строк {stats['rows']}, занятий в аудиториях карты {stats['events']}, "

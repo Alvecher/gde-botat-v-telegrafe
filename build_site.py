@@ -22,8 +22,13 @@ import re
 import sys
 from collections import Counter
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import openpyxl
+
+# Сервер сборки (GitHub Actions) работает в UTC; время на странице должно быть
+# московским, как и время самих пар, иначе "обновлено в 11:04" будет обманом.
+MSK = ZoneInfo("Europe/Moscow")
 
 ROOT = Path(__file__).resolve().parent
 MAP_DIR = ROOT / "map"
@@ -198,7 +203,7 @@ def build(xlsx: Path) -> dict:
     for layout, out in OUTPUTS.items():
         data = {
             "layout": layout,
-            "generatedAt": dt.datetime.now().strftime("%d.%m.%Y %H:%M"),
+            "generatedAt": dt.datetime.now(MSK).strftime("%d.%m.%Y %H:%M"),
             "source": xlsx.name,
             "range": [days[0], days[-1]] if days else None,
             "viewBox": VIEWBOX[layout],

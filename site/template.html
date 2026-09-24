@@ -238,6 +238,7 @@
 
   <footer>
     <p id="footer"></p>
+    <p id="updatedAt"></p>
     <p class="author">Создатель и по всем вопросам: <a href="https://t.me/oobeemee" target="_blank" rel="noopener">@oobeemee</a></p>
   </footer>
 </div>
@@ -808,6 +809,7 @@ function setNow() {
 function init() {
   $("footer").textContent = "Данные: выгрузка расписания cu-schedule.ru, только аудитории S, N, W, E кампуса ЦТ. "
     + "Бронирования вне расписания (мероприятия, встречи) сюда не попадают, аудитория может быть занята и без пары. Время московское.";
+  $("updatedAt").textContent = `Последняя актуализация с cu-schedule.ru: ${DATA.generatedAt} мск`;
   if (DATA.range) { $("dateInput").min = DATA.range[0]; $("dateInput").max = DATA.range[1]; }
   // переключатель между версиями: файлы лежат рядом и локально, и на хостинге
   $("layoutLink").href = COMBINED ? "floors.html" : "index.html";
