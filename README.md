@@ -23,6 +23,26 @@
 
 Локально (без GitHub) то же самое: `python3 auto_update.py`. Ручная пересборка из своего файла: `./Обновить\ карту.command путь/к/файлу.xlsx` или `python3 build_site.py путь/к/файлу.xlsx` (нужен только `openpyxl`).
 
+## Автообновление: планировщик GitHub не работает, используем внешний пинг
+
+Проверено 25.09.2026: `schedule`-триггер `.github/workflows/update.yml` у этого репозитория не срабатывает
+вообще — ни разу за 2 суток, включая тест с cron раз в 10 минут (22 минуты, 0 запусков). Это известный,
+задокументированный баг на стороне GitHub, затрагивающий часть репозиториев без видимой причины в настройках
+(cron синтаксис верный, Actions включены, workflow активен). `workflow_dispatch` (ручной запуск и запуск через
+API) при этом работает штатно.
+
+Рабочая замена: бесплатный внешний будильник [cron-job.org](https://cron-job.org), который в 07:00, 09:00 и
+11:00 UTC (10:00, 12:00, 14:00 МСК) сам дёргает GitHub REST API:
+
+- URL: `POST https://api.github.com/repos/Alvecher/gde-botat-v-telegrafe/actions/workflows/update.yml/dispatches`
+- Заголовки: `Authorization: Bearer <fine-grained PAT только для этого репозитория, право Actions: Read and write>`,
+  `Accept: application/vnd.github+json`, `Content-Type: application/json`, `X-GitHub-Api-Version: 2022-11-28`
+- Тело: `{"ref":"main"}`
+
+Токен создаётся на https://github.com/settings/personal-access-tokens/new, привязывается только к этому
+репозиторию, хранится только в cron-job.org (не в репозитории, не в переписке). Строку `schedule` в
+`update.yml` трогать не нужно — она осталась на случай, если GitHub однажды починит триггер на своей стороне.
+
 ## Хостинг: GitHub Pages
 
 Настройка (один раз):
