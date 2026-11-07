@@ -184,6 +184,15 @@
            max-height: 62vh; overflow-y: auto; padding: 14px 16px calc(14px + env(safe-area-inset-bottom)); }
   }
 </style>
+<script>
+(function(m,e,t,r,i,k,a){m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
+m[i].l=1*new Date();
+for (var j = 0; j < document.scripts.length; j++) {if (document.scripts[j].src === r) { return; }}
+k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)})
+(window, document, "script", "https://mc.yandex.ru/metrika/tag.js", "ym");
+ym(114120294, "init", {clickmap:true, trackLinks:true, accurateTrackBounce:10000, webvisor:true});
+</script>
+<noscript><div><img src="https://mc.yandex.ru/watch/114120294" style="position:absolute; left:-9999px;" alt=""></div></noscript>
 </head>
 <body>
 <div class="page">
@@ -842,6 +851,29 @@ function init() {
 }
 
 init();
+
+// Метрика: цели и активное время (вкладка видна и было действие за последние 5 с)
+(function () {
+  function goal(name, params) { try { if (window.ym) ym(114120294, "reachGoal", name, params); } catch (e) {} }
+  var last = Date.now(), active = 0, sent = {}, tick = 1000;
+  ["pointerdown", "pointermove", "wheel", "keydown", "touchstart", "input"].forEach(function (ev) {
+    addEventListener(ev, function () { last = Date.now(); }, { passive: true });
+  });
+  setInterval(function () {
+    if (document.visibilityState === "visible" && Date.now() - last < 5000) active += tick / 1000;
+    [[5, "active_5s"], [10, "active_10s"], [20, "active_20s"], [40, "active_40s"]].forEach(function (g) {
+      if (active >= g[0] && !sent[g[1]]) { sent[g[1]] = 1; goal(g[1]); }
+    });
+  }, tick);
+  var once = {};
+  function first(name, el, ev) {
+    var n = document.getElementById(el);
+    if (n) n.addEventListener(ev, function () { if (!once[name]) { once[name] = 1; goal(name); } });
+  }
+  first("slider_used", "timeRange", "input");
+  first("zoom_used", "zoomIn", "click");
+  first("zoom_used", "zoomOut", "click");
+})();
 </script>
 </body>
 </html>
